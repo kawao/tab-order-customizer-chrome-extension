@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<!--
+    Copyright (c) 2025 Tomoyuki Kawao
+    Released under the MIT license.
+    see https://opensource.org/licenses/MIT
+  -->
+<html>
+  <head>
+    <title>Tab Order Customizer Options</title>
+  </head>
+  <body>
+    <h1>Tab Order Customizer Options</h1>
+    <div style="margin-bottom: 20px;">
+      <div>Where to place the newly created tab</div>
+      <div>
+        <div>
+          <input type="radio" id="open-d" name="open" value="d">
+          <label for="open-d">Default behavior of Chrome</label>
+        </div>
+        <div>
+          <input type="radio" id="open-L" name="open" value="L">
+          <label for="open-L">Left end (after pinned tabs)</label>
+        </div>
+        <div>
+          <input type="radio" id="open-l" name="open" value="l">
+          <label for="open-l">Left next to the active tab</label>
+        </div>
+        <div>
+          <input type="radio" id="open-r" name="open" value="r">
+          <label for="open-r">Right next to the active tab</label>
+        </div>
+        <div>
+          <input type="radio" id="open-R" name="open" value="R">
+          <label for="open-R">Right end</label>
+        </div>
+      </div>
+    </div>
+    <div style="margin-bottom: 20px;">
+      <div>Which tab becomes active when the active tab is closed</div>
+      <div>
+        <div>
+          <input type="radio" id="close-d" name="close" value="d">
+          <label for="close-d">Default behavior of Chrome</label>
+        </div>
+        <div>
+          <input type="radio" id="close-L" name="close" value="L">
+          <label for="close-L">Leftmost tab</label>
+        </div>
+        <div>
+          <input type="radio" id="close-l" name="close" value="l">
+          <label for="close-l">Left next to the closed tab</label>
+        </div>
+        <div>
+          <input type="radio" id="close-r" name="close" value="r">
+          <label for="close-r">Right next to the closed tab</label>
+        </div>
+        <div>
+          <input type="radio" id="close-R" name="close" value="R">
+          <label for="close-R">Rightmost tab</label>
+        </div>
+       <div>
+          <input type="radio" id="close-o" name="close" value="o">
+          <label for="close-o">Last active tab (in reverse order of activation)</label>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="common.js"></script>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>
