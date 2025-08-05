@@ -60,3 +60,59 @@ export class CloseMode {
         await chrome.storage.local.set({ [this.STORAGE_KEY]: closeMode });
     }
 }
+
+export class PopupAsTab {
+
+    static get STORAGE_KEY() { return "popupAsTab"; }
+
+    constructor() {
+        this.setEnabled(false);
+        this.setExclusionList([]);
+    }
+
+    async load() {
+        const storage = await chrome.storage.local.get(PopupAsTab.STORAGE_KEY);
+        if (storage[PopupAsTab.STORAGE_KEY] === undefined) {
+            console.log("Option " + PopupAsTab.STORAGE_KEY + " is not saved");
+            return null;
+        }
+        for (const key in this) {
+            this[key] = storage[PopupAsTab.STORAGE_KEY][key];
+        }
+        return this;
+    }
+
+    async save () {
+        await chrome.storage.local.set({ [PopupAsTab.STORAGE_KEY]: this });
+    }
+
+    setEnabled(enabled) {
+        this.enabled = enabled;
+    }
+
+    isEnabled() {
+        return this.enabled;
+    }
+
+    setExclusionList(exclusionList) {
+        if (typeof exclusionList === "string" || exclusionList instanceof String) {
+            exclusionList = exclusionList.trim();
+            exclusionList = (exclusionList === "") ? [] : exclusionList.split(/\s+/);
+        }
+        this.exclusionList = exclusionList;
+    }
+
+    getExclusionList() {
+        return this.exclusionList.join("\n");
+    }
+
+    isInExclusionList(url) {
+        for (const exclusion of this.exclusionList) {
+            if (url.startsWith(exclusion)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+}

@@ -7,7 +7,10 @@
  * see https://opensource.org/licenses/MIT
  */
 
-import { OpenMode, CloseMode } from "./common.js"
+import { OpenMode, CloseMode, PopupAsTab } from "./common.js"
+
+const ID_POPUPASTAB_ENABLED = "popupAsTab-enabled";
+const ID_POPUPASTAB_EXCLUSIONLIST = "popupAsTab-exclusionList";
 
 OpenMode.get().then((openMode) => {
     document.getElementById("open-"+openMode).checked = true;
@@ -15,6 +18,15 @@ OpenMode.get().then((openMode) => {
 
 CloseMode.get().then((closeMode) => {
     document.getElementById("close-"+closeMode).checked = true;
+});
+
+new PopupAsTab().load().then((popupAsTab) => {
+    document.getElementById(ID_POPUPASTAB_ENABLED).checked = popupAsTab.isEnabled();
+    let exclusionListElement = document.getElementById(ID_POPUPASTAB_EXCLUSIONLIST);
+    exclusionListElement.value = popupAsTab.getExclusionList();
+    if (!popupAsTab.isEnabled()) {
+        exclusionListElement.disabled = true;
+    }
 });
 
 document.getElementsByName("open").forEach((element) => {
@@ -28,3 +40,24 @@ document.getElementsByName("close").forEach((element) => {
         CloseMode.set(event.currentTarget.value);
     });
 });
+
+document.getElementById(ID_POPUPASTAB_ENABLED).addEventListener("change", (event) => {
+    document.getElementById(ID_POPUPASTAB_EXCLUSIONLIST).disabled = !event.currentTarget.checked;
+    savePopupAsTab();
+});
+
+document.getElementById(ID_POPUPASTAB_EXCLUSIONLIST).addEventListener("change", (event) => {
+    savePopupAsTab();
+});
+
+window.addEventListener('unload', () => {
+    savePopupAsTab();
+});
+
+const savePopupAsTab = () => {
+    let popupAsTab = new PopupAsTab();
+    popupAsTab.setEnabled(document.getElementById(ID_POPUPASTAB_ENABLED).checked);
+    popupAsTab.setExclusionList(document.getElementById(ID_POPUPASTAB_EXCLUSIONLIST).value);
+    popupAsTab.save();
+}
+

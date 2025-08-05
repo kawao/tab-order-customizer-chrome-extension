@@ -7,7 +7,7 @@
  * see https://opensource.org/licenses/MIT
  */
 
-import { OpenMode, CloseMode } from "./common.js"
+import { OpenMode, CloseMode, PopupAsTab } from "./common.js"
 
 class Synchronizer {
     constructor() {
@@ -144,10 +144,43 @@ class ActHistory {
     }
 }
 
+class PopupList {
+
+    static async add(popup) {
+        let list = await PopupList.load();
+        list.push(popup);
+        await PopupList.save(list);
+    }
+
+    static async remove(popup) {
+        let list = await PopupList.load();
+        list = list.filter((element) => element !== popup);
+        await PopupList.save(list);
+    }
+
+    static async includes(popup) {
+        const list = await PopupList.load();
+        return list.includes(popup);
+    }
+
+    static get STORAGE_KEY() { return "popups"; }
+
+    static async load() {
+        const storage = await chrome.storage.session.get({[PopupList.STORAGE_KEY]:[]});
+        return storage[PopupList.STORAGE_KEY];
+    }
+
+    static async save(popups) {
+        await chrome.storage.session.set({[PopupList.STORAGE_KEY]:popups});
+    }
+
+}
+
 let synchronizer = new Synchronizer();
+let tabIdToSkipActivation = null;
 let nextTabIdToBeActivated = null;
 
-chrome.windows.onCreated.addListener(async (window) => {
+chrome.windows.onCreated.addListener((window) => {
     synchronizer.run(onWindowCreated, window);
 }, { windowTypes: [chrome.windows.CreateType.NORMAL] });
 
@@ -159,7 +192,7 @@ const onWindowCreated = async (window) => {
     await actHistory.save();
 }
 
-chrome.windows.onRemoved.addListener(async (windowId) => {
+chrome.windows.onRemoved.addListener((windowId) => {
     synchronizer.run(onWindowRemoved, windowId);
 }, { windowTypes: [chrome.windows.CreateType.NORMAL] });
 
@@ -171,41 +204,53 @@ const onWindowRemoved = async (windowId) => {
     await actHistory.clean();
 }
 
-chrome.runtime.onInstalled.addListener(async (details) => {
+chrome.windows.onRemoved.addListener((windowId) => {
+    synchronizer.run(onPopupRemoved, windowId);
+}, { windowTypes: [chrome.windows.CreateType.POPUP] });
+
+const onPopupRemoved = async (windowId) => {
+    await PopupList.remove(windowId);
+}
+
+chrome.runtime.onInstalled.addListener((details) => {
     if (details.reason === chrome.runtime.OnInstalledReason.INSTALL) {
         synchronizer.run(onInstall);
+    } else if (details.reason === chrome.runtime.OnInstalledReason.UPDATE) {
+        synchronizer.run(onUpdate);
     }
 });
 
 const onInstall = async () => {
     await OpenMode.set(OpenMode.DEFAULT);
     await CloseMode.set(CloseMode.DEFAULT);
+    await new PopupAsTab().save();
     chrome.runtime.openOptionsPage();
 }
 
-chrome.tabs.onCreated.addListener(async (tab) => {
+const onUpdate = async () => {
+    let popupAsTab = new PopupAsTab();
+    if (!await popupAsTab.load()) {
+        await popupAsTab.save();
+        chrome.runtime.openOptionsPage();
+    }
+}
+
+chrome.tabs.onCreated.addListener((tab) => {
     synchronizer.run(onTabCreated, tab);
 });
 
 const onTabCreated = async (tab) => {
-    const window = await chrome.windows.get(tab.windowId).catch((error) => {
-        console.log(error);
-        return null;
-    });
-    if (window === null) {
-        return;
-    }
-    if (window.type !== chrome.windows.CreateType.NORMAL) {
+    if (await getWindowType(tab.windowId) !== chrome.windows.CreateType.NORMAL) {
         return;
     }
 
-    let map = new TabMap(window.id);
+    let map = new TabMap(tab.windowId);
     await map.load();
     if (map.getIndex(tab.id) >= 0) {
         return;
     }
 
-    let actHistory = new ActHistory(window.id);
+    let actHistory = new ActHistory(tab.windowId);
     await actHistory.load();
 
     let newIndex = tab.index;
@@ -262,26 +307,19 @@ const onTabCreated = async (tab) => {
     }
 }
 
-chrome.tabs.onRemoved.addListener(async (tabId, info) => {
+chrome.tabs.onRemoved.addListener((tabId, info) => {
     synchronizer.run(onTabRemoved, tabId, info.windowId);
 });
 
 const onTabRemoved = async (tabId, windowId) => {
-    const window = await chrome.windows.get(windowId).catch((error) => {
-        console.log(error);
-        return null;
-    });
-    if (window === null) {
-        return;
-    }
-    if (window.type !== chrome.windows.CreateType.NORMAL) {
+    if (await getWindowType(windowId) !== chrome.windows.CreateType.NORMAL) {
         return;
     }
 
-    let actHistory = new ActHistory(window.id);
+    let actHistory = new ActHistory(windowId);
     await actHistory.load();
 
-    let map = new TabMap(window.id);
+    let map = new TabMap(windowId);
     await map.load();
 
     if (map.getNumberOfTabs() <= 1) {
@@ -337,25 +375,34 @@ const onTabRemoved = async (tabId, windowId) => {
     }
 
     actHistory.remove(tabId);
-    await actHistory.save();
-
     await map.build();
-    await map.save();
+
     if (nextTabIdToBeActivated) {
         if (map.getIndex(nextTabIdToBeActivated) < 0) {
             console.error("next tab id to be activated may have been removed");
             nextTabIdToBeActivated = null;
         } else {
-            chrome.tabs.update(nextTabIdToBeActivated, { active:true });
+            const activeTabId = (await chrome.tabs.query({ windowId: windowId, active: true }))[0].id;
+            if (nextTabIdToBeActivated !== activeTabId) {
+                tabIdToSkipActivation = activeTabId;
+                console.log("activate:"+tabIdToSkipActivation+"=>"+nextTabIdToBeActivated);
+                await chrome.tabs.update(nextTabIdToBeActivated, { active:true });
+            }
+            if (actHistory.getCurrent() !== nextTabIdToBeActivated) {
+                actHistory.push(nextTabIdToBeActivated);
+            }
         }
     }
+
+    await actHistory.save();
+    await map.save();
 }
 
-chrome.tabs.onDetached.addListener(async (tabId, info) => {
+chrome.tabs.onDetached.addListener((tabId, info) => {
     synchronizer.run(onTabRemoved, tabId, info.oldWindowId);
 });
 
-chrome.tabs.onAttached.addListener(async (tabId, info) => {
+chrome.tabs.onAttached.addListener((tabId, info) => {
     synchronizer.run(onTabAttached, tabId, info);
 });
 
@@ -363,65 +410,109 @@ const onTabAttached = async (tabId, info) => {
     await onTabCreated(await chrome.tabs.get(tabId));
 }
 
-chrome.tabs.onMoved.addListener(async (tabId, info) => {
+chrome.tabs.onMoved.addListener((tabId, info) => {
     synchronizer.run(onTabUpdated, tabId, info.windowId);
 });
 
-chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
+chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
     if ("pinned" in info) {
         synchronizer.run(onTabUpdated, tabId, tab.windowId);
+    }
+    if ("url" in info) {
+        synchronizer.run(onUrlUpdated, tab);
     }
 });
 
 const onTabUpdated = async (tabId, windowId) => {
+    if (await getWindowType(windowId) !== chrome.windows.CreateType.NORMAL) {
+        return;
+    }
+
     let map = new TabMap(windowId);
     await map.build();
     await map.save();
 }
 
-chrome.tabs.onActivated.addListener(async (info) => {
-    if (nextTabIdToBeActivated && nextTabIdToBeActivated !== info.tabId) {
-        console.log("skip onActivated event");
+const onUrlUpdated = async (tab) => {
+    if (tab.url === "about:blank") {
         return;
     }
+    if (await getWindowType(tab.windowId) !== chrome.windows.CreateType.POPUP) {
+        return;
+    }
+
+    const popupAsTab = await new PopupAsTab().load();
+    if (popupAsTab.isEnabled() && !await PopupList.includes(tab.windowId)) {
+        const parent = await chrome.windows.getLastFocused({ windowTypes: [chrome.windows.CreateType.NORMAL] });
+        if (parent === null) {
+            console.error("failed to get last focused window");
+        } else if (popupAsTab.isInExclusionList(tab.url)) {
+            await PopupList.add(tab.windowId);
+        } else {
+            await chrome.tabs.move(tab.id, { windowId: parent.id, index: -1 });
+            await chrome.tabs.update(tab.id, { active: true });
+        }
+    }
+}
+
+chrome.tabs.onActivated.addListener((info) => {
     synchronizer.run(onTabActivated, info);
 });
 
 const onTabActivated = async (info) => {
-    const window = await chrome.windows.get(info.windowId).catch((error) => {
-        console.log(error);
-        return null;
-    });
-    if (window === null) {
+    if (await getWindowType(info.windowId) !== chrome.windows.CreateType.NORMAL) {
         return;
     }
-    if (window.type !== chrome.windows.CreateType.NORMAL) {
-        return;
-    }
-    if (nextTabIdToBeActivated && nextTabIdToBeActivated !== info.tabId) {
-        console.log("skip onActivated event");
-        return;
-    }
-    nextTabIdToBeActivated = null;
 
-    let actHistory = new ActHistory(window.id);
+    if (nextTabIdToBeActivated && nextTabIdToBeActivated === info.tabId) {
+        console.log("skip onActivated event: " + info.tabId);
+        nextTabIdToBeActivated = null;
+        return;
+    }
+    if (tabIdToSkipActivation && tabIdToSkipActivation === info.tabId) {
+        console.log("skip onActivated event: " + info.tabId);
+        tabIdToSkipActivation = null;
+        return;
+    }
+    if (nextTabIdToBeActivated || tabIdToSkipActivation) {
+        console.error("unexpected tabId:%d nextTabIdToBeActivated:%d tabIdToSkipActivation:%d", info.tabId, tabIdToSkipActivation, nextTabIdToBeActivated);
+    }
+    let actHistory = new ActHistory(info.windowId);
     await actHistory.load();
     await actHistory.push(info.tabId);
     await actHistory.save();
 }
 
+const getWindowType = async (windowId) => {
+    const window = await chrome.windows.get(windowId).catch((error) => {
+        console.log(error);
+        return null;
+    });
+    if (window === null) {
+        return null;
+    }
+    return window.type;
+}
+
 const initialize = async () => {
     const storage = await chrome.storage.session.get({initialized:false});
     if (!storage.initialized) {
-        const windows = await chrome.windows.getAll({ windowTypes: [chrome.windows.CreateType.NORMAL] });
+        const windows = await chrome.windows.getAll();
         for (const window of windows) {
-            let map = new TabMap(window.id);
-            await map.build();
-            await map.save();
+            switch (window.type) {
+            case chrome.windows.CreateType.NORMAL:
+                let map = new TabMap(window.id);
+                await map.build();
+                await map.save();
 
-            let actHistory = new ActHistory(window.id);
-            await actHistory.push();
-            await actHistory.save();
+                let actHistory = new ActHistory(window.id);
+                await actHistory.push();
+                await actHistory.save();
+                break;
+            case chrome.windows.CreateType.POPUP:
+                await PopupList.add(window.id);
+                break;
+            }
         }
         await chrome.storage.session.set({initialized:true});
     }
