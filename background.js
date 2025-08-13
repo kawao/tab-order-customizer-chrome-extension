@@ -440,14 +440,15 @@ const onUrlUpdated = async (tab) => {
     if (await getWindowType(tab.windowId) !== chrome.windows.CreateType.POPUP) {
         return;
     }
-
+    if (await PopupList.includes(tab.windowId)) {
+        return;
+    }
+    await PopupList.add(tab.windowId);
     const popupAsTab = await new PopupAsTab().load();
-    if (popupAsTab.isEnabled() && !await PopupList.includes(tab.windowId)) {
+    if (popupAsTab.isEnabled() && !popupAsTab.isInExclusionList(tab.url)) {
         const parent = await chrome.windows.getLastFocused({ windowTypes: [chrome.windows.CreateType.NORMAL] });
         if (parent === null) {
             console.error("failed to get last focused window");
-        } else if (popupAsTab.isInExclusionList(tab.url)) {
-            await PopupList.add(tab.windowId);
         } else {
             await chrome.tabs.move(tab.id, { windowId: parent.id, index: -1 });
             await chrome.tabs.update(tab.id, { active: true });
