@@ -69,6 +69,9 @@ class TabMap {
             this.map[tab.index] = { id:tab.id, pinned:tab.pinned };
         });
     }
+    remove(tabId) {
+        this.map = this.map.filter((element) => element.id !== tabId);
+    }
     getNumberOfTabs() {
         return this.map.length;
     }
@@ -179,6 +182,7 @@ class PopupList {
 let synchronizer = new Synchronizer();
 let tabIdToSkipActivation = null;
 let nextTabIdToBeActivated = null;
+let skippedTabIdToBeActivated = null;
 
 chrome.windows.onCreated.addListener((window) => {
     synchronizer.run(onWindowCreated, window);
@@ -375,23 +379,36 @@ const onTabRemoved = async (tabId, windowId) => {
     }
 
     actHistory.remove(tabId);
-    await map.build();
+    map.remove(tabId);
 
     if (nextTabIdToBeActivated) {
-        if (map.getIndex(nextTabIdToBeActivated) < 0) {
-            console.error("next tab id to be activated may have been removed");
-            nextTabIdToBeActivated = null;
-        } else {
-            const activeTabId = (await chrome.tabs.query({ windowId: windowId, active: true }))[0].id;
-            if (nextTabIdToBeActivated !== activeTabId) {
-                tabIdToSkipActivation = activeTabId;
-                console.log("activate:"+tabIdToSkipActivation+"=>"+nextTabIdToBeActivated);
-                await chrome.tabs.update(nextTabIdToBeActivated, { active:true });
-            }
-            if (actHistory.getCurrent() !== nextTabIdToBeActivated) {
-                actHistory.push(nextTabIdToBeActivated);
-            }
+        if (actHistory.getCurrent() !== nextTabIdToBeActivated) {
+            actHistory.push(nextTabIdToBeActivated);
         }
+        const activeTabId = (await chrome.tabs.query({ windowId: windowId, active: true }))[0].id;
+        if (nextTabIdToBeActivated !== activeTabId) {
+            tabIdToSkipActivation = activeTabId;
+            skippedTabIdToBeActivated = null;
+            console.log("activate:"+tabIdToSkipActivation+"=>"+nextTabIdToBeActivated);
+            await chrome.tabs.update(nextTabIdToBeActivated, { active:true }).catch((error) => {
+                console.log(error);
+                nextTabIdToBeActivated = null;
+                skippedTabIdToBeActivated = tabIdToSkipActivation;
+            });
+        } else {
+            if (nextTabIdToBeActivated === tabIdToSkipActivation) {
+                tabIdToSkipActivation = null;
+            }
+            if (nextTabIdToBeActivated === skippedTabIdToBeActivated) {
+                nextTabIdToBeActivated = null;
+            } else if (skippedTabIdToBeActivated) {
+                console.error("Active tab:%d and skipped tab:%d are different",  nextTabIdToBeActivated, skippedTabIdToBeActivated);
+            }
+            skippedTabIdToBeActivated = null;
+        }
+    } else if (skippedTabIdToBeActivated) {
+        console.error("There is a skipped tab:%d, but there is no next tab", skippedTabIdToBeActivated);
+        skippedTabIdToBeActivated = null;
     }
 
     await actHistory.save();
@@ -465,19 +482,27 @@ const onTabActivated = async (info) => {
         return;
     }
 
-    if (nextTabIdToBeActivated && nextTabIdToBeActivated === info.tabId) {
+    if (nextTabIdToBeActivated === info.tabId) {
         console.log("skip onActivated event: " + info.tabId);
         nextTabIdToBeActivated = null;
         return;
     }
-    if (tabIdToSkipActivation && tabIdToSkipActivation === info.tabId) {
+    if (tabIdToSkipActivation === info.tabId) {
         console.log("skip onActivated event: " + info.tabId);
         tabIdToSkipActivation = null;
         return;
     }
-    if (nextTabIdToBeActivated || tabIdToSkipActivation) {
-        console.error("unexpected tabId:%d nextTabIdToBeActivated:%d tabIdToSkipActivation:%d", info.tabId, tabIdToSkipActivation, nextTabIdToBeActivated);
+
+    if (!await chrome.tabs.get(info.tabId).catch((error) => {
+        console.log(error);
+        return null;
+    })) {
+        return;
     }
+    if (nextTabIdToBeActivated || tabIdToSkipActivation) {
+        console.error("unexpected tabId:%d nextTabIdToBeActivated:%d tabIdToSkipActivation:%d", info.tabId, nextTabIdToBeActivated, tabIdToSkipActivation);
+    }
+
     let actHistory = new ActHistory(info.windowId);
     await actHistory.load();
     await actHistory.push(info.tabId);
