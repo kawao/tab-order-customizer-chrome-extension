@@ -386,7 +386,9 @@ const onTabRemoved = async (tabId, windowId) => {
             actHistory.push(nextTabIdToBeActivated);
         }
         const activeTabId = (await chrome.tabs.query({ windowId: windowId, active: true }))[0].id;
-        if (nextTabIdToBeActivated !== activeTabId) {
+        if (map.getIndex(activeTabId) < 0) {
+            console.log("a new tab(%d) may have been created during the remove(%d) process", activeTabId, tabId);
+        } else if (nextTabIdToBeActivated !== activeTabId) {
             tabIdToSkipActivation = activeTabId;
             skippedTabIdToBeActivated = null;
             console.log("activate:"+tabIdToSkipActivation+"=>"+nextTabIdToBeActivated);
