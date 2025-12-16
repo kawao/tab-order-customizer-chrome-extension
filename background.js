@@ -259,7 +259,9 @@ const onTabCreated = async (tab) => {
 
     let newIndex = tab.index;
     if (actHistory.includes(tab.id)) {
-        console.log("new tab already included in actHistory:" + tab.id);
+        console.log("The tab is already included in actHistory: " + tab.id);
+    } else if ([tab.url, tab.pendingUrl].includes("chrome://tab-search.top-chrome/split_new_tab_page.html")) {
+        console.log("The tab was displayed in split view: " + tab.id);
     } else {
         let activeIndex = -1;
         const activeTabId = actHistory.getCurrent();
