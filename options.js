@@ -1,14 +1,16 @@
 /*!
  * Tab Order Customizer
  *
- * Copyright (c) 2025 Tomoyuki Kawao
+ * Copyright (c) 2025-2026 Tomoyuki Kawao
  *
  * Released under the MIT license.
  * see https://opensource.org/licenses/MIT
  */
 
-import { OpenMode, CloseMode, PopupAsTab } from "./common.js"
+import { OpenMode, CloseMode, PopupAsTab, OpenOptions } from "./common.js"
 
+const ID_OPEN_IS_EXCLUDE_DUPLICATED = "open-isExcludeDuplicated";
+const ID_OPEN_IS_FOCUS_ON_NEW_TAB = "open-isFocusOnNewTab";
 const ID_POPUPASTAB_ENABLED = "popupAsTab-enabled";
 const ID_POPUPASTAB_EXCLUSIONLIST = "popupAsTab-exclusionList";
 
@@ -18,6 +20,14 @@ OpenMode.get().then((openMode) => {
 
 CloseMode.get().then((closeMode) => {
     document.getElementById("close-"+closeMode).checked = true;
+});
+
+OpenOptions.isExcludeDuplicated().then((isExcludeDuplicated) => {
+    document.getElementById(ID_OPEN_IS_EXCLUDE_DUPLICATED).checked = isExcludeDuplicated;
+});
+
+OpenOptions.isFocusOnNewTab().then((isFocusOnNewTab) => {
+    document.getElementById(ID_OPEN_IS_FOCUS_ON_NEW_TAB).checked = isFocusOnNewTab;
 });
 
 new PopupAsTab().load().then((popupAsTab) => {
@@ -41,6 +51,14 @@ document.getElementsByName("close").forEach((element) => {
     });
 });
 
+document.getElementById(ID_OPEN_IS_EXCLUDE_DUPLICATED).addEventListener("change", (event) => {
+    OpenOptions.setExcludeDuplicated(event.currentTarget.checked);
+});
+
+document.getElementById(ID_OPEN_IS_FOCUS_ON_NEW_TAB).addEventListener("change", (event) => {
+    OpenOptions.setFocusOnNewTab(event.currentTarget.checked);
+});
+
 document.getElementById(ID_POPUPASTAB_ENABLED).addEventListener("change", (event) => {
     document.getElementById(ID_POPUPASTAB_EXCLUSIONLIST).disabled = !event.currentTarget.checked;
     savePopupAsTab();
@@ -50,8 +68,10 @@ document.getElementById(ID_POPUPASTAB_EXCLUSIONLIST).addEventListener("change", 
     savePopupAsTab();
 });
 
-window.addEventListener('unload', () => {
-    savePopupAsTab();
+window.addEventListener('pagehide', (event) => {
+    if (!event.persisted) {
+        savePopupAsTab();
+    }
 });
 
 const savePopupAsTab = () => {

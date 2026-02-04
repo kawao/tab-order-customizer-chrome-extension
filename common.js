@@ -1,7 +1,7 @@
 /*!
  * Tab Order Customizer
  *
- * Copyright (c) 2025 Tomoyuki Kawao
+ * Copyright (c) 2025-2026 Tomoyuki Kawao
  *
  * Released under the MIT license.
  * see https://opensource.org/licenses/MIT
@@ -113,6 +113,38 @@ export class PopupAsTab {
             }
         }
         return false;
+    }
+
+}
+
+export class OpenOptions {
+
+    static get IS_EXCLUDE_DUPLICATED_STORAGE_KEY() {
+        return "o_isExcludeDuplicated";
+    }
+    static async isExcludeDuplicated() {
+        const storage = await chrome.storage.local.get(this.IS_EXCLUDE_DUPLICATED_STORAGE_KEY);
+        if (storage[this.IS_EXCLUDE_DUPLICATED_STORAGE_KEY] === undefined) {
+            return false;
+        }
+        return storage[this.IS_EXCLUDE_DUPLICATED_STORAGE_KEY];
+    }
+    static async setExcludeDuplicated(isExcludeDuplicated) {
+        await chrome.storage.local.set({ [this.IS_EXCLUDE_DUPLICATED_STORAGE_KEY]: isExcludeDuplicated });
+    }
+
+    static get IS_FOCUS_ON_NEW_TAB_STORAGE_KEY() {
+        return  "o_isFocusOnNewTab";
+    }
+    static async isFocusOnNewTab() {
+        const storage = await chrome.storage.local.get(this.IS_FOCUS_ON_NEW_TAB_STORAGE_KEY);
+        if (storage[this.IS_FOCUS_ON_NEW_TAB_STORAGE_KEY] === undefined) {
+            return false;
+        }
+        return storage[this.IS_FOCUS_ON_NEW_TAB_STORAGE_KEY];
+    }
+    static async setFocusOnNewTab(isFocusOnNewTab) {
+        await chrome.storage.local.set({ [this.IS_FOCUS_ON_NEW_TAB_STORAGE_KEY]: isFocusOnNewTab });
     }
 
 }
