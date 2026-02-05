@@ -329,7 +329,7 @@ const isDuplicated = async (tab, map) => {
     if (leftTab == null) {
         return false;
     }
-    return [leftTab.url, leftTab.pendingUrl].includes(tab.url);
+    return [tab.url, tab.pendingUrl].includes(leftTab.url);
 }
 
 chrome.tabs.onRemoved.addListener((tabId, info) => {
