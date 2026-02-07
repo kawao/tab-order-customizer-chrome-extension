@@ -262,7 +262,7 @@ const onTabCreated = async (tab) => {
         console.log("The tab is already included in actHistory: " + tab.id);
     } else if ([tab.url, tab.pendingUrl].includes("chrome://tab-search.top-chrome/split_new_tab_page.html")) {
         console.log("The tab was displayed in split view: " + tab.id);
-    } else if (await OpenOptions.isExcludeDuplicated() && isDuplicated(tab, map)) {
+    } else if (await OpenOptions.isExcludeDuplicated() && await isDuplicated(tab, map)) {
         console.log("This tab was created by duplication: " + tab.id);
     } else {
         let activeIndex = -1;
