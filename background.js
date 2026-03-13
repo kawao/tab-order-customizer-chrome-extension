@@ -183,6 +183,7 @@ let synchronizer = new Synchronizer();
 let tabIdToSkipActivation = null;
 let nextTabIdToBeActivated = null;
 let skippedTabIdToBeActivated = null;
+let tabIdActivatedPriorToRemoval = null;
 
 chrome.windows.onCreated.addListener((window) => {
     synchronizer.run(onWindowCreated, window);
@@ -397,6 +398,9 @@ const onTabRemoved = async (tabId, windowId) => {
             console.error("illegal closeMode: " + closeMode);
             break;
         }
+        if (tabIdActivatedPriorToRemoval && !nextTabIdToBeActivated) {
+            nextTabIdToBeActivated = tabIdActivatedPriorToRemoval;
+        }
     }
 
     actHistory.remove(tabId);
@@ -428,6 +432,24 @@ const onTabRemoved = async (tabId, windowId) => {
                 console.error("Active tab:%d and skipped tab:%d are different",  nextTabIdToBeActivated, skippedTabIdToBeActivated);
             }
             skippedTabIdToBeActivated = null;
+        }
+        if (tabIdActivatedPriorToRemoval) {
+            if (tabIdToSkipActivation) {
+                if (tabIdToSkipActivation === tabIdActivatedPriorToRemoval) {
+                    tabIdToSkipActivation = null;
+                } else {
+                    console.error("The tab:%d that is currently active during the removal process is different from the tab:%d that was active prior to the removal process.", tabIdToSkipActivation, tabIdActivatedPriorToRemoval);
+                }
+            } else if (nextTabIdToBeActivated) {
+                if (nextTabIdToBeActivated === tabIdActivatedPriorToRemoval) {
+                    nextTabIdToBeActivated = null;
+                } else {
+                    console.error("The tab:%d that should be active during the removal process is different from the tab:%d that was active prior to the removal process.", nextTabIdToBeActivated, tabIdActivatedPriorToRemoval);
+                }
+            } else {
+                console.error("There was an activated tab:%d prior to removal, yet the corresponding tabs are not present during the removal process.", tabIdActivatedPriorToRemoval);
+            }
+            tabIdActivatedPriorToRemoval = null;
         }
     } else if (skippedTabIdToBeActivated) {
         console.error("There is a skipped tab:%d, but there is no next tab", skippedTabIdToBeActivated);
@@ -528,6 +550,15 @@ const onTabActivated = async (info) => {
 
     let actHistory = new ActHistory(info.windowId);
     await actHistory.load();
+    const currentTab = actHistory.getCurrent();
+    if (currentTab && !await chrome.tabs.get(currentTab).catch((error) => {
+        console.log(error);
+        return null;
+    })) {
+        console.log("The current tab has been removed.");
+        tabIdActivatedPriorToRemoval = info.tabId;
+        return;
+    }
     await actHistory.push(info.tabId);
     await actHistory.save();
 }

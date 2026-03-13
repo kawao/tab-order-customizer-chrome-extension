@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Tab Order Customizer",
-    "version": "1.1.2",
+    "version": "1.1.3",
     "description": "Customize tab order.",
     "permissions": [ "tabs", "storage" ],
     "icons": {
