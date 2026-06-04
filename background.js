@@ -66,7 +66,11 @@ class TabMap {
                 console.error("tab index is negative:" + tab.index, tab);
                 return;
             }
-            this.map[tab.index] = { id:tab.id, pinned:tab.pinned };
+            this.map[tab.index] = {
+                id:tab.id,
+                pinned:tab.pinned,
+                splitViewId:(typeof tab.splitViewId === "undefined") ? chrome.tabs.SPLIT_VIEW_ID_NONE : tab.splitViewId
+            };
         });
     }
     remove(tabId) {
@@ -93,6 +97,12 @@ class TabMap {
             }
         }
         return this.map.length;
+    }
+    isInSameSplitView(index1, index2) {
+        if (this.map[index1].splitViewId === chrome.tabs.SPLIT_VIEW_ID_NONE) {
+            return false;
+        }
+        return this.map[index1].splitViewId === this.map[index2].splitViewId;
     }
     getStorageKey() {
         return "M" + this.windowId;
@@ -286,11 +296,17 @@ const onTabCreated = async (tab) => {
         case OpenMode.LEFT:
             if (activeIndex >= 0) {
                 newIndex = activeIndex;
+                if (activeIndex > 0 && map.isInSameSplitView(activeIndex, activeIndex - 1)) {
+                    newIndex--;
+                }
             }
             break;
         case OpenMode.RIGHT:
             if (activeIndex >= 0) {
                 newIndex = activeIndex + 1;
+                if (activeIndex + 1 < map.getNumberOfTabs() && map.isInSameSplitView(activeIndex, activeIndex + 1)) {
+                    newIndex++;
+                }
             }
             break;
         case OpenMode.RIGHT_END:
@@ -477,7 +493,7 @@ chrome.tabs.onMoved.addListener((tabId, info) => {
 });
 
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
-    if ("pinned" in info) {
+    if ("pinned" in info || "splitViewId" in info) {
         synchronizer.run(onTabUpdated, tabId, tab.windowId);
     }
     if ("url" in info) {
